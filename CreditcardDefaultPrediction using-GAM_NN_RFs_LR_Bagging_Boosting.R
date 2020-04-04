@@ -2,6 +2,7 @@
 
 # Libraries ---------------------------------------------------------------
 library(MASS)
+library(dplyr)
 library('boot')
 library(leaps)
 library(rpart)
@@ -362,15 +363,22 @@ mean(pred.gam.out!=credit.test$default)
 
 # Nueral Net --------------------------------------------------------------
 
-credit.nnet <- nnet(default~.,data=credit.train, size=3, maxit=1000,decay=0.3)
+
+credit.train_nn <- credit.train %>% mutate_at(c(1,5,12:23), funs((.-min(.))/max(.-min(.))))
+credit.test_nn <- credit.test %>% mutate_at(c(1,5,12:23), funs((.-min(.))/max(.-min(.))))
+head(credit.train_nn)
+head(credit.test_nn)
+
+
+credit.nnet <- nnet(default~.,data=credit.train_nn, size=3, maxit=1000,decay=0.3)
 credit.nnet$fitted.values
 
-prob.nnet= predict(credit.nnet,credit.test)
+prob.nnet= predict(credit.nnet,credit.test_nn)
 head(prob.nnet)
 
 pcut<-(1/6)
 pred.nnet = (prob.nnet > pcut)*1
-table(credit.test$default,pred.nnet, dnn=c("Observed","Predicted"))
+table(credit.test_nn$default,pred.nnet, dnn=c("Observed","Predicted"))
 
-mean(credit.test$default!= pred.nnet)
-costfunc_mgcv(credit.test$default,pred.nnet,optimal.pcut_mgcv)
+mean(credit.test_nn$default!= pred.nnet)
+costfunc_mgcv(credit.test_nn$default,pred.nnet,optimal.pcut_mgcv)
