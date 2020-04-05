@@ -1,13 +1,23 @@
 
 # Packages ----------------------------------------------------------------
-
+#detach(package:neuralnet)
 install.packages('PerformanceAnalytics')
 install.packages("ggcorrplot")
 install.packages('ROCR')
 
+
+# Libraries ---------------------------------------------------------------
+
+library('tidyverse')
+library("glmnet")
+library(PRROC)
+library(rpart)
+library(rpart.plot)
+library(ROCR)
+
 # Bankruptcy ---------------------------------------------------------------
 
-bankruptcy.data<-read.csv("C:/Users/Vishnu/Desktop/Spring 2020/Data Mining/bankruptcy.csv")
+bankruptcy.data<-read.csv("C:/Users/Vishnu/Desktop/Spring 2020/Data Mining/Data Mining 1/bankruptcy.csv")
 head(bankruptcy.data)
 bankruptcy.data$CUSIP<-as.numeric(bankruptcy.data$CUSIP)
 
@@ -19,9 +29,6 @@ length(bankruptcy.data$CUSIP)
 # CUSIP is ID column ------------------------------------------------------
 
 bankruptcy.data<-bankruptcy.data[,!names(bankruptcy.data) %in% c("FYEAR","CUSIP")]
-
-
-library('tidyverse')
 glimpse(bankruptcy.data$DLRSN)
 
 
@@ -127,7 +134,7 @@ bankruptcy.test.X = as.matrix(select(bankruptcy.data, -DLRSN)[-index,])
 bankruptcy.train.Y = bankruptcy.data[index, "DLRSN"]
 bankruptcy.test.Y = bankruptcy.data[-index, "DLRSN"]
 
-library("glmnet")
+
 bankruptcy.lasso<- glmnet(x=bankruptcy.train.X, y=bankruptcy.train.Y, family = "binomial")
 
 
@@ -213,7 +220,7 @@ FNR.test<- sum(bankruptcy.test$DLRSN==1 & class.glm0.test==0)/sum(bankruptcy.tes
 
 #install.packages("PRROC")
 
-library(PRROC)
+
 score1= pred.glm.bankruptcytrain[bankruptcy.train$DLRSN==1]
 score0= pred.glm.bankruptcytrain[bankruptcy.train$DLRSN==0]
 roc= roc.curve(score1, score0, curve = T)
@@ -327,8 +334,7 @@ cvglm2$delta[2]
 
 # Decision Trees ----------------------------------------------------------
 
-library(rpart)
-library(rpart.plot)
+
 
 
 # Building tree -----------------------------------------------------------
@@ -367,6 +373,7 @@ table(bankruptcy.test$DLRSN,bankruptcy.test.pred.tree1class,dnn = c("Truth","Pre
 pred.testtree<-prediction(bankruptcy.test.pred.tree1[,2],bankruptcy.test$DLRSN)
 perf.testtree<-performance(pred.testtree,"tpr","fpr")
 unlist(slot(performance(pred.testtree,"auc"),"y.values"))
+plot(perf.testtree, colorize=TRUE)
 
 MR.treetest<- mean(bankruptcy.test$DLRSN!= bankruptcy.test.pred.tree1class)
 
@@ -391,6 +398,136 @@ pred.testtree<-prediction(bankruptcy.test.pred.tree1[,2],bankruptcy.test$DLRSN)
 perf.testtree<-performance(pred.testtree,"tpr","fpr")
 unlist(slot(performance(pred.testtree,"auc"),"y.values"))
 
+
+
+# GAM ---------------------------------------------------------------------
+head(bankruptcy.data)
+#gam.formula.credit<-as.formula(paste("default~s(LIMIT_BAL)+s(AGE)+(PAY_0)+(PAY_2)+(PAY_3)+(PAY_4)+(PAY_5)+(PAY_6)+s(BILL_AMT1)+s(BILL_AMT2)+s(BILL_AMT3)+s(BILL_AMT4)+s(BILL_AMT5)+s(BILL_AMT6)+s(PAY_AMT1)+s(PAY_AMT2)+s(PAY_AMT3)+s(PAY_AMT4)+s(PAY_AMT5)+s(PAY_AMT6)+",paste(colnames(credit.data)[2:4],collapse='+')))
+
+form<-paste("DLRSN~s(",paste(colnames(bankruptcy.data)[2:11],collapse=')+s('),")")
+gam.formula<-as.formula(form)
+bankruptcy.gam<-gam(formula = gam.formula,family='binomial',data=bankruptcy.train)
+summary(bankruptcy.gam)
+
+
+form2<-paste("DLRSN~R1+R3+R4+s(R2)+s(",paste(colnames(bankruptcy.data)[6:11],collapse = ")+s("),paste(")"))
+(gam.formula.bankruptcy2<-as.formula(form2))
+bankruptcy.gam<-gam(formula = gam.formula.bankruptcy2,family='binomial',data=bankruptcy.train)
+summary(bankruptcy.gam)
+
+
+predict_mgcv_train<-predict(bankruptcy.gam,bankruptcy.train,type="response")
+
+costfunc_mgcv = function(obs, pred.p, pcut)
+{
+  weight1 = 35   # define the weight for "true=1 but pred=0" (FN) placing weight on FN such that we need to avoid cases wherewe predict it wont default but it has in the actual data
+  weight0 = 1    # define the weight for "true=0 but pred=1" (FP)
+  c1 = (obs==1)&(pred.p<pcut) # count for "true=1 but pred=0"   (FN)
+  #print(sum(c1))
+  c0 = (obs==0)&(pred.p>=pcut)   # count for "true=0 but pred=1"   (FP)
+  #print (sum(c0))
+  cost = mean(weight1*c1 + weight0*c0)  # misclassification with weight
+  return(cost) # you have to return to a value when you write R functions
+} 
+
+p.seq = seq(0.01, 1, 0.01) 
+cost = rep(0, length(p.seq))  
+for(i in 1:length(p.seq)){ 
+  cost[i] = costfunc_mgcv(obs = bankruptcy.train$DLRSN, pred.p = predict_mgcv_train, pcut = p.seq[i])  
+}
+
+min(cost)
+plot(p.seq, cost)
+optimal.pcut_mgcv = p.seq[which(cost==min(cost))]
+optimal.pcut_mgcv
+
+# Insample performance ----------------------------------------------------
+
+pred.gam.in<-(predict_mgcv_train>=optimal.pcut_mgcv)*1
+table(bankruptcy.train$DLRSN,pred.gam.in,dnn=c("Observed","Predicted"))
+mean(pred.gam.in!=bankruptcy.train$DLRSN)
+
+costfunc_mgcv(obs = bankruptcy.train$DLRSN, pred.p = predict_mgcv.train, pcut =optimal.pcut_mgcv )
+
+#AUC
+predauc.gam.train<-prediction(as.numeric(predict_mgcv_train),bankruptcy.train$DLRSN)
+perf.train<-performance(predauc.gam.train,"tpr","fpr")
+unlist(slot(performance(predauc.gam.train,"auc"),"y.values"))
+plot(perf.train,colorize=T)
+
+# Out of sample -----------------------------------------------------------
+
+predict_mgcv.test<-predict(bankruptcy.gam,newdata = bankruptcy.test,type='response')
+pred.gam.out<-(predict_mgcv.test>=optimal.pcut_mgcv)*1
+table(bankruptcy.test$DLRSN,pred.gam.out,dnn=c("Observed","Predicted"))
+mean(pred.gam.out!=bankruptcy.test$DLRSN)
+
+costfunc_mgcv(obs = bankruptcy.test$DLRSN, pred.p = predict_mgcv.test, pcut =optimal.pcut_mgcv ) 
+
+#AUC
+predauc.gam.test<-prediction(as.numeric(predict_mgcv.test),bankruptcy.test$DLRSN)
+perf.test<-performance(predauc.gam.test,"tpr","fpr")
+unlist(slot(performance(predauc.gam.test,"auc"),"y.values"))
+plot(perf.test,colorize=T)
+
+
+
+
+# Neural Network ----------------------------------------------------------
+
+head(bankruptcy.train)
+
+
+# Standardizing data ------------------------------------------------------
+
+
+bankruptcy.train_nn <- bankruptcy.train %>% mutate_at(2:11, funs((.-min(.))/max(.-min(.))))
+bankruptcy.test_nn <- bankruptcy.test %>% mutate_at(2:11, funs((.-min(.))/max(.-min(.))))
+head(bankruptcy.train_nn)
+
+bankruptcy.nnet <- nnet(DLRSN~.,data=bankruptcy.train_nn, size=3, maxit=1000,decay=0.3)
+bankruptcy.nnet$fitted.values
+
+
+# Insample Performance ----------------------------------------------------
+
+bankruptcy.train.prob.nnet= predict(bankruptcy.nnet,bankruptcy.train_nn)
+
+pcut<-optimal.pcut_mgcv #1/35
+
+bankruptcy.train.class.nnet = (bankruptcy.train.prob.nnet > pcut)*1
+table(bankruptcy.train_nn$DLRSN,bankruptcy.train.class.nnet, dnn=c("Observed","Predicted"))
+
+mean(bankruptcy.train_nn$DLRSN!= bankruptcy.train.class.nnet)
+costfunc_mgcv(bankruptcy.train_nn$DLRSN,bankruptcy.train.prob.nnet,optimal.pcut_mgcv)
+
+#AUC
+
+pred.nn.train.auc<-prediction(bankruptcy.train.prob.nnet,bankruptcy.train_nn$DLRSN)
+perf.nn.train.auc<-performance(pred.nn.train.auc,"tpr","fpr")
+unlist(slot(performance(pred.nn.train.auc,"auc"),"y.values"))
+plot(perf.nn.train.auc,colorize=T)
+
+
+
+# Out of sample Performance -----------------------------------------------
+
+bankruptcy.test.prob.nnet= predict(bankruptcy.nnet,bankruptcy.test_nn)
+
+pcut<-optimal.pcut_mgcv #1/35
+
+bankruptcy.test.class.nnet = (bankruptcy.test.prob.nnet > pcut)*1
+table(bankruptcy.test_nn$DLRSN,bankruptcy.test.class.nnet, dnn=c("Observed","Predicted"))
+
+mean(bankruptcy.test_nn$DLRSN!= bankruptcy.test.class.nnet)
+costfunc_mgcv(bankruptcy.test_nn$DLRSN,bankruptcy.test.prob.nnet,optimal.pcut_mgcv)
+
+#AUC
+
+pred.nn.test.auc<-prediction(bankruptcy.test.prob.nnet,bankruptcy.test_nn$DLRSN)
+perf.nn.test.auc<-performance(pred.nn.test.auc,"tpr","fpr")
+unlist(slot(performance(pred.nn.test.auc,"auc"),"y.values"))
+plot(perf.nn.test.auc,colorize=T)
 
 
 
