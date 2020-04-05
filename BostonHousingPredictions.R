@@ -102,7 +102,7 @@ Boston.bag<- randomForest(medv~., data = boston.train, ntree=100,mtry=ncol(bosto
 #mtry= differentiating factor between RF and Bagging
 #Bagging - mtry = no of predictors randomly selected in Random forests , in bagging all predcitors are selected
 #ntree = bootstrap samples
-Boston.bag$
+Boston.bag$mse
 
 
 # In sample prediction and MSE --------------------------------------------
@@ -248,6 +248,18 @@ nn<-neuralnet(form,data=Boston.train,hidden=c(5,3),linear.output=T)
 plot(nn)
 
 
+# In sample ---------------------------------------------------------------
+pr.nn_train <- compute(nn,Boston.train[,1:13])
+predictions_train<-pr.nn_train$net.result*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
+actualValues_train<-(Boston.train$medv)*((max(Boston$medv)-min(Boston$medv))+min(Boston$medv))
+MSE.nn_train <- sum((actualValues_train - predictions_train)^2)/nrow(Boston.train)
+MSE.nn_train
+
+
+
+
+
+
 
 pr.nn <- compute(nn,Boston.test[,1:13])
 pr.nn$net.result  #probabilities
@@ -261,7 +273,7 @@ MSE.nn <- sum((actualValues - predictions)^2)/nrow(Boston.test)
 MSE.nn
 
 
-# Cross Validation --------------------------------------------------------
+68# Cross Validation --------------------------------------------------------
 
 
 set.seed(450)
