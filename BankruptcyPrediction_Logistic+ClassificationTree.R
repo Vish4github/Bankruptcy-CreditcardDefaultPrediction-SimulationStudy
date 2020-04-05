@@ -361,7 +361,7 @@ plot(perf, colorize=TRUE)
 unlist(slot(performance(pred.traintree,"auc"),"y.values"))
 
 MR.treetrain<- mean(bankruptcy.train$DLRSN!= bankruptcy.train.pred.tree1class)
-
+costfunc(bankruptcy.train$DLRSN, bankruptcy.train.pred.tree1)
 
 # Predictions - Out of sample ---------------------------------------------
 
@@ -377,7 +377,7 @@ plot(perf.testtree, colorize=TRUE)
 
 MR.treetest<- mean(bankruptcy.test$DLRSN!= bankruptcy.test.pred.tree1class)
 
-
+costfunc(bankruptcy.test$DLRSN, bankruptcy.test.pred.tree1)
 # Pruning ---------------------------------------------------------------
 
 #boston.largetree <- rpart(formula = medv ~ ., data = boston.train, cp = 0.001)
