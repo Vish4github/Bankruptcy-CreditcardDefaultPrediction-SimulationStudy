@@ -274,7 +274,7 @@ MSE.nn
 
 
 68# Randomly selecting the starting points to make sure the convergence is global --------------------------------------------------------
-
+#Cross Validation
 
 set.seed(13255870)
 cv.error <- NULL
