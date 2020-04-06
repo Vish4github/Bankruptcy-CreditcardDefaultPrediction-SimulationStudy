@@ -273,11 +273,12 @@ MSE.nn <- sum((actualValues - predictions)^2)/nrow(Boston.test)
 MSE.nn
 
 
-68# Cross Validation --------------------------------------------------------
+68# Randomly selecting the starting points to make sure the convergence is global --------------------------------------------------------
 
 
-set.seed(450)
+set.seed(13255870)
 cv.error <- NULL
+cv.error_train<-NULL
 k <- 10
 
 library(plyr) 
@@ -289,20 +290,25 @@ for(i in 1:k){
   train.cv <- scaled[index,]
   test.cv <- scaled[-index,]
   
-  nn <- neuralnet(form,data=train.cv,hidden=c(5,2),linear.output=T)
+  nn <- neuralnet(form,data=train.cv,hidden=c(5,3),linear.output=T)
+  
+  
+  pr.nn_train <- compute(nn,train.cv[,1:13])
+  predictions_train<-pr.nn_train$net.result*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
+  actualValues_train<-(train.cv$medv)*((max(Boston$medv)-min(Boston$medv))+min(Boston$medv))
+  cv.error_train[i] <- sum((actualValues_train - predictions_train)^2)/nrow(train.cv)
   
   pr.nn <- compute(nn,test.cv[,1:13])
   pr.nn <- pr.nn$net.result*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
-  
   test.cv.r <- (test.cv$medv)*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
-  
   cv.error[i] <- sum((test.cv.r - pr.nn)^2)/nrow(test.cv)
-  
   pbar$step()
 }
 
 mean(cv.error)
+mean(cv.error_train)
 cv.error
+cv.error_train
 
 
 
